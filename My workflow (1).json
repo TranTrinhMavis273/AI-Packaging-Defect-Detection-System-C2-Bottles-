@@ -1,0 +1,376 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const rf = $json;\n\n// lấy danh sách predictions\nconst predictions = rf.predictions || [];\n\n// threshold\nconst THRESHOLD = 0.5;\n\n// danh sách nhãn lỗi\nconst DEFECT_LABELS = [\"loi_bao_bi\", \"loi_nap\", \"deform\"];\n\nlet status = \"PASS\";\nlet defect = null;\nlet confidence = null;\n\n// lọc các prediction là lỗi và vượt threshold\nconst defectCandidates = predictions.filter(p => \n  DEFECT_LABELS.includes(p.class) && p.confidence >= THRESHOLD\n);\n\nif (defectCandidates.length > 0) {\n  // lấy defect có confidence cao nhất\n  const topDefect = defectCandidates.sort((a,b) => b.confidence - a.confidence)[0];\n\n  status = \"FAIL\";\n  defect = topDefect.class;\n  confidence = topDefect.confidence;\n}\n\nreturn {\n  status: status,\n  defect: defect,\n  confidence: confidence,\n  total_predictions: predictions.length,\n  raw_predictions: predictions\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1312,
+        -176
+      ],
+      "id": "bbb3cea9-7e2c-4dbe-acce-588eec632593",
+      "name": "Decision Pass/Fail"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://detect.roboflow.com/pakagedefectdetection/18?api_key=WYrpuprSpv8WtsQ0UZsv",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            },
+            {}
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        960,
+        -176
+      ],
+      "id": "65604105-7197-4dfe-bcee-de69498ce84f",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "useCustomSchema": true,
+        "tableId": "detect_logs",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "detect_log_id",
+              "fieldValue": "={{ $json.raw_predictions[0].detection_id }}"
+            },
+            {
+              "fieldId": "raw_defects_json",
+              "fieldValue": "={{ $json.raw_predictions[0].class }}"
+            },
+            {
+              "fieldId": "detect_status",
+              "fieldValue": "={{ $json.status }}"
+            },
+            {
+              "fieldId": "detected_at",
+              "fieldValue": "={{ $('getUrl').item.json.body.created_at }}"
+            },
+            {
+              "fieldId": "confidence_threshold",
+              "fieldValue": "={{ $json.confidence }}"
+            },
+            {
+              "fieldId": "public_id",
+              "fieldValue": "={{ $('Webhook').item.json.body.public_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1632,
+        -176
+      ],
+      "id": "89703ec4-daa2-44f3-829e-becff98a22ec",
+      "name": "Create a row",
+      "notesInFlow": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "Vm2LrVTi9JNUpQ8v",
+          "name": "Supabase account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "inspect",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        176,
+        -176
+      ],
+      "id": "296b99a1-7125-4244-8c0c-457d445d2a79",
+      "name": "Webhook",
+      "webhookId": "e5b61d96-11a4-4dfa-b6a7-bf18044e7170"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://zvvokuubiihzaiebbtmq.supabase.co/rest/v1/image_logs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "sb_publishable_FKwVi7y6rdiAOKXEjZJqKw_Nimglxwo"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer sb_publishable_FKwVi7y6rdiAOKXEjZJqKw_Nimglxwo"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"public_id\": \"{{ $json.body.public_id }}\",\n  \"image_url\": \"{{ $json.body.url }}\",\n  \"width\": {{ $json.body.width }},\n  \"height\": {{ $json.body.height }},\n  \"format\": \"{{ $json.body.format }}\",\n  \"status\": \"received\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        384,
+        -176
+      ],
+      "id": "ec8f2da7-cbcf-47cf-95fd-1367a1bec2b9",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.body.url }}",
+        "sendBody": true,
+        "contentType": "raw",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        656,
+        -176
+      ],
+      "id": "dd62b6f5-fd09-4276-85df-e8caf8e06a0a",
+      "name": "getUrl"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cf904925-2220-4707-9ca5-1e0e939d961e",
+              "leftValue": "={{ $json.detect_status }}",
+              "rightValue": "=FAIL",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1872,
+        -176
+      ],
+      "id": "4ab010ff-6d21-47df-a5ad-9bf8c67d1dae",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "chatId": "=6511597473",
+        "text": "=Hi, QC. Detection_ID: {{ $json.raw_predictions[0].detection_id }}. Confidence:  {{ $json.confidence }}. Status: {{ $json.status }}. Defect Type: {{ $json.defect }}. Image: {{ $('Webhook').item.json.body.url }}. Created at:{{ $('Webhook').item.json.body.created_at }}. Please, check again!",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2304,
+        -224
+      ],
+      "id": "596fd51e-4245-437d-8cd7-48c546120b1d",
+      "name": "Send a text message",
+      "webhookId": "098efac0-42af-4051-89f6-359c7684ea64",
+      "credentials": {
+        "telegramApi": {
+          "id": "etEpGfYLdnPwJ7Yd",
+          "name": "Telegram account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "alerts",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "detect_log_id",
+              "fieldValue": "={{ $('Create a row').item.json.detect_log_id }}"
+            },
+            {
+              "fieldId": "main_defect",
+              "fieldValue": "={{ $('Create a row').item.json.raw_defects_json }}"
+            },
+            {
+              "fieldId": "max_confidence",
+              "fieldValue": "={{ $('Create a row').item.json.confidence_threshold }}"
+            },
+            {
+              "fieldId": "alert_message",
+              "fieldValue": "={{ $json.result.text }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        2512,
+        -224
+      ],
+      "id": "2905121b-3374-436d-aa61-d4f41d1f6f74",
+      "name": "Create a row1",
+      "credentials": {
+        "supabaseApi": {
+          "id": "Vm2LrVTi9JNUpQ8v",
+          "name": "Supabase account 4"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Decision Pass/Fail": {
+      "main": [
+        [
+          {
+            "node": "Create a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Decision Pass/Fail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "getUrl",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "getUrl": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a row": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        [
+          {
+            "node": "Create a row1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "802219f7-85cd-4472-9311-c0055fda74db",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "58cc480580f302b31ac8c42d470df5c3cc7abec35d99098288a5a3ac3b56a449"
+  },
+  "id": "oH4hNtMDLYH6erw7",
+  "tags": []
+}
